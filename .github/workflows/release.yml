@@ -1,0 +1,38 @@
+name: Build & release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - run: go test ./...
+
+      - name: Download data
+        run: |
+          curl -fsSLO https://wp-public-data.s3.amazonaws.com/pings/pings-2020-07-19-2020-07-20.csv.gz
+          curl -fsSLO https://wp-public-data.s3.amazonaws.com/pings/servers-2020-07-19.csv
+          curl -fsSL -o dbip.csv.gz "https://download.db-ip.com/free/dbip-city-lite-$(date -u +%Y-%m).csv.gz"
+
+      - name: Build
+        run: go run . -pings pings-2020-07-19-2020-07-20.csv.gz -servers servers-2020-07-19.csv -geo dbip.csv.gz -out latency.mmdb
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$(date -u +%Y-%m)" latency.mmdb \
+            --notes "Built from DB-IP Lite City and WonderNetwork pings.
+
+          IP Geolocation by DB-IP (https://db-ip.com), CC BY 4.0.
+          Latency data by WonderNetwork (https://wondernetwork.com)."
