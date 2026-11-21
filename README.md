@@ -1,8 +1,8 @@
 # latency-mmdb
 
-Builds a MaxMind DB (`.mmdb`) that maps every IP range to its nearest
-[WonderNetwork](https://wondernetwork.com/pings) city and the median RTT from
-that city to every other WonderNetwork city.
+Builds a MaxMind DB (`.mmdb`) that maps every IP range to its country, continent,
+nearest [WonderNetwork](https://wondernetwork.com/pings) city and the median RTT
+from that city to every other WonderNetwork city.
 
 ## Download
 
@@ -31,13 +31,19 @@ About 1 minute and 1 GB RAM; produces a ~55 MB file.
 
 ```json
 {
+  "country": "PL",
+  "continent": "EU",
   "city": "Frankfurt",
   "location": { "latitude": 50.11, "longitude": 8.68 },
   "rtt": { "London": 13, "Istanbul": 35, "Singapore": 150, "...": 0 }
 }
 ```
 
+- `country` / `continent`: the range's own DB-IP country (ISO 3166-1 alpha-2) and continent
+  (`AF`, `AN`, `AS`, `EU`, `NA`, `OC`, `SA`). Use these for geo routing, not `city`, which can be
+  in another country.
 - `city`: nearest WonderNetwork city to the range's DB-IP coordinates.
+- `location`: coordinates of `city`, not of the range.
 - `rtt`: median of the `avg` ping (ms, both directions) from `city` to each other city.
   The record's own city is absent (treat as best), and a few pairs are missing (treat as unknown).
 - Reserved/private ranges and DB-IP `ZZ` rows are not in the DB.

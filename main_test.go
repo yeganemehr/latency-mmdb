@@ -12,8 +12,10 @@ import (
 )
 
 type rec struct {
-	City string            `maxminddb:"city"`
-	RTT  map[string]uint16 `maxminddb:"rtt"`
+	Country   string            `maxminddb:"country"`
+	Continent string            `maxminddb:"continent"`
+	City      string            `maxminddb:"city"`
+	RTT       map[string]uint16 `maxminddb:"rtt"`
 }
 
 func writeFile(t *testing.T, name, body string) string {
@@ -51,6 +53,7 @@ func TestBuild(t *testing.T) {
 1.0.0.0,1.0.0.255,EU,FR,,Paris,48.85,2.35
 1.0.1.0,1.0.1.255,EU,DE,,Berlin,52.52,13.40
 1.0.2.0,1.0.2.255,EU,DE,,Berlin,52.52,13.40
+1.0.3.0,1.0.3.255,EU,PL,,Berlin,52.52,13.40
 192.168.0.0,192.168.255.255,EU,DE,,Berlin,52.52,13.40
 2a00::,2a00::ffff,AS,MY,,Kuala Lumpur,3.14,101.69
 `)
@@ -67,7 +70,7 @@ func TestBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.skipped != 1 || st.ranges != 4 || st.reserved == 0 {
+	if st.skipped != 1 || st.ranges != 5 || st.reserved == 0 {
 		t.Fatalf("stats = %+v", st)
 	}
 
@@ -85,16 +88,17 @@ func TestBuild(t *testing.T) {
 	defer db.Close()
 
 	cases := map[string]rec{
-		"1.0.0.7":  {City: "London", RTT: map[string]uint16{"Frankfurt": 16, "Singapore": 180}},
-		"1.0.2.9":  {City: "Frankfurt", RTT: map[string]uint16{"London": 16, "Singapore": 160}},
-		"2a00::42": {City: "Singapore", RTT: map[string]uint16{"Frankfurt": 160, "London": 180}},
+		"1.0.0.7":  {Country: "FR", Continent: "EU", City: "London", RTT: map[string]uint16{"Frankfurt": 16, "Singapore": 180}},
+		"1.0.2.9":  {Country: "DE", Continent: "EU", City: "Frankfurt", RTT: map[string]uint16{"London": 16, "Singapore": 160}},
+		"1.0.3.9":  {Country: "PL", Continent: "EU", City: "Frankfurt", RTT: map[string]uint16{"London": 16, "Singapore": 160}},
+		"2a00::42": {Country: "MY", Continent: "AS", City: "Singapore", RTT: map[string]uint16{"Frankfurt": 160, "London": 180}},
 	}
 	for ip, want := range cases {
 		var got rec
 		if err := db.Lookup(netip.MustParseAddr(ip)).Decode(&got); err != nil {
 			t.Fatal(err)
 		}
-		if got.City != want.City || len(got.RTT) != len(want.RTT) {
+		if got.Country != want.Country || got.Continent != want.Continent || got.City != want.City || len(got.RTT) != len(want.RTT) {
 			t.Fatalf("%s: got %+v want %+v", ip, got, want)
 		}
 		for k, v := range want.RTT {

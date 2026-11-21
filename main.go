@@ -202,19 +202,20 @@ func nearest(cities map[string]city, lat, lon float64) string {
 	return best
 }
 
-type cityKey struct{}
+type recordKey struct{}
 
-func (cityKey) Key(v mmdbtype.DataType) ([]byte, error) {
-	return []byte(v.(mmdbtype.Map)["city"].(mmdbtype.String)), nil
+func (recordKey) Key(v mmdbtype.DataType) ([]byte, error) {
+	m := v.(mmdbtype.Map)
+	return []byte(string(m["city"].(mmdbtype.String)) + "|" + string(m["country"].(mmdbtype.String)) + "|" + string(m["continent"].(mmdbtype.String))), nil
 }
 
 func build(geoPath string, cities map[string]city, rtt map[[2]string]uint16) (*mmdbwriter.Tree, stats, error) {
 	var st stats
 	tree, err := mmdbwriter.New(mmdbwriter.Options{
-		KeyGenerator: cityKey{},
+		KeyGenerator: recordKey{},
 		DatabaseType: "Liteium-Latency",
 		Description: map[string]string{
-			"en": "Nearest WonderNetwork city and median RTT (ms) to every other city. Data: WonderNetwork (wondernetwork.com), DB-IP Lite (db-ip.com, CC BY 4.0).",
+			"en": "Country, continent, nearest WonderNetwork city and median RTT (ms) to every other city. Data: WonderNetwork (wondernetwork.com), DB-IP Lite (db-ip.com, CC BY 4.0).",
 		},
 		RecordSize: 28,
 	})
@@ -222,19 +223,20 @@ func build(geoPath string, cities map[string]city, rtt map[[2]string]uint16) (*m
 		return nil, st, err
 	}
 
-	recs := records(cities, rtt)
+	base := records(cities, rtt)
+	recs := map[string]mmdbtype.Map{}
 	cache := map[[2]float64]string{}
 
 	var cur netipx.IPRange
-	var curCity string
+	var curID string
 	flush := func() error {
-		if curCity == "" {
+		if curID == "" {
 			return nil
 		}
 		st.ranges++
 		for _, p := range cur.Prefixes() {
 			st.prefixes++
-			err := tree.Insert(netipx.PrefixIPNet(p), recs[curCity])
+			err := tree.Insert(netipx.PrefixIPNet(p), recs[curID])
 			var rErr *mmdbwriter.ReservedNetworkError
 			var aErr *mmdbwriter.AliasedNetworkError
 			if errors.As(err, &rErr) || errors.As(err, &aErr) {
@@ -279,14 +281,23 @@ func build(geoPath string, cities map[string]city, rtt map[[2]string]uint16) (*m
 			cache[key] = name
 		}
 
-		if name == curCity && cur.To().Next() == start {
+		id := name + "|" + row[3] + "|" + row[2]
+		if _, ok := recs[id]; !ok {
+			rec := mmdbtype.Map{"country": mmdbtype.String(row[3]), "continent": mmdbtype.String(row[2])}
+			for k, v := range base[name] {
+				rec[k] = v
+			}
+			recs[id] = rec
+		}
+
+		if id == curID && cur.To().Next() == start {
 			cur = netipx.IPRangeFrom(cur.From(), end)
 			continue
 		}
 		if err := flush(); err != nil {
 			return nil, st, err
 		}
-		cur, curCity = netipx.IPRangeFrom(start, end), name
+		cur, curID = netipx.IPRangeFrom(start, end), id
 	}
 	if err := flush(); err != nil {
 		return nil, st, err
